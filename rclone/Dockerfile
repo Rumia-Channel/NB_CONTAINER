@@ -1,12 +1,16 @@
-# ベースイメージに rclone/rclone を使う
+# rclone/Dockerfile
+
 FROM rclone/rclone:latest
 
-# jq を追加でインストール
-RUN apk add --no-cache jq
+# jq とディレクトリ作成
+RUN apk add --no-cache jq && \
+    mkdir -p /config
 
-# 設定やスクリプトをコンテナにコピー
-COPY backup.sh /backup.sh
-COPY rclone.conf /config/rclone.conf
+# スクリプトを /config に配置
+COPY backup.sh /config/backup.sh
 
-# エントリポイントを設定
-ENTRYPOINT ["/bin/sh", "/backup.sh"]
+# 実行権限を付与
+RUN chmod +x /config/backup.sh
+
+# ENTRYPOINT を /config/backup.sh に
+ENTRYPOINT ["/bin/sh", "/config/backup.sh"]

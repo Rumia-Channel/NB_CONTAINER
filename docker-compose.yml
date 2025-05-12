@@ -1,6 +1,7 @@
 version: '3.9'
 
 services:
+
   nginx:
     build: ./nginx
     container_name: nginx
@@ -11,6 +12,8 @@ services:
     ports:
       - "443:443"
     environment:
+      TS_ADMIN_KEY: ${TS_ADMIN_KEY}
+      TAILNET_NAME: ${TAILNET_NAME}
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_HOSTNAME: ${TS_HOSTNAME}
     volumes:
@@ -23,10 +26,12 @@ services:
   app:
     build: ./app
     container_name: app
+    ports:
+    - "8000:8000"
     environment:
-      GIT_REPO: ${GIT_REPO}
-      GIT_BRANCH: ${GIT_BRANCH}
-      AUTO_CLONE: "true"
+      GIT_REPO:    ${GIT_REPO}
+      GIT_BRANCH:  ${GIT_BRANCH}
+      AUTO_CLONE:  "true"
       COOKIE_PATH: ${COOKIE_PATH}
     volumes:
       - ./files:/app/files:ro
@@ -35,24 +40,21 @@ services:
       - app-extensions:/app/extensions
       - shared-data:/share/data
 
-    rclone-backup:
-    build:
-      context: ./rclone
+  rclone-backup:
+    build: ./rclone
     container_name: rclone-backup
     depends_on:
       - app
     environment:
-      WEBDAV_URL:      ${WEBDAV_URL}
-      WEBDAV_PATH:     ${WEBDAV_PATH}
-      WEBDAV_USER:     ${WEBDAV_USER}
-      WEBDAV_PASS_ENC: ${WEBDAV_PASS_ENC}
-      WEBDAV_VENDOR:   ${WEBDAV_VENDOR}
+      WEBDAV_URL:         ${WEBDAV_URL}
+      WEBDAV_PATH:        ${WEBDAV_PATH}
+      WEBDAV_USER:        ${WEBDAV_USER}
+      WEBDAV_PASS:        ${WEBDAV_PASS}
+      WEBDAV_VENDOR:      ${WEBDAV_VENDOR}
       WEBDAV_REMOTE_NAME: ${WEBDAV_REMOTE_NAME}
-    entrypoint: ["/bin/sh", "/config/backup.sh"]
+    # エントリポイントは Dockerfile の ENTRYPOINT を使うのでここでは不要
     volumes:
       - shared-data:/share/data
-      - ./rclone:/config:ro
-
 
 volumes:
   nginx-tailscale:

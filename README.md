@@ -5,6 +5,10 @@
 
 ---
 
+## 注意!!
+files/setting.ini の domain= = の値と .env の TS_HOSTNAM = の値は必ず一致させること。
+
+---
 ## 📁 ディレクトリ構成
 
 ```text
@@ -53,8 +57,10 @@ project-root/
 
 ```dotenv
 # Tailscale
+TS_ADMIN_KEY=tskey-api-xxxxxxxxxxxxxxxxxxxx
+TAILNET_NAME=tail0exam.ts.net
 TS_AUTHKEY=tskey-xxxxxxxxxxxxxxxxxxxx
-TS_HOSTNAME=my-nginx
+TS_HOSTNAME=example.tail0exam.ts.net
 
 # アプリ（Git）
 GIT_REPO=https://github.com/your/repo.git

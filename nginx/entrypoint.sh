@@ -1,30 +1,57 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "[tailscale] 起動準備中..."
+# --- ① 必須変数チェック ---
+: "${TS_ADMIN_KEY:?TS_ADMIN_KEY が未設定です}"
+: "${TAILNET_NAME:?TAILNET_NAME が未設定です}"
+: "${TS_HOSTNAME:?TS_HOSTNAME が未設定です}"
+: "${TS_AUTHKEY:?TS_AUTHKEY が未設定です}"
 
-tailscaled &
+NODE="${TS_HOSTNAME%%.*}"   # narou-test
+FQDN="${TS_HOSTNAME}"       # narou-test.taila0dfa.ts.net
 
-# tailscaledが使えるようになるまで待機
-TRIES=0
-until tailscale status &>/dev/null || [ $TRIES -gt 10 ]; do
-  sleep 1
-  TRIES=$((TRIES+1))
-done
+# --- 既存 narou-test デバイスを全削除 ---
+echo "[tailscale] FQDN に一致する既存デバイスを削除: ${FQDN}"
+# ① デバイス一覧取得
+devices_json=$(
+  curl -s -u "${TS_ADMIN_KEY}:" \
+    "https://api.tailscale.com/api/v2/tailnet/${TAILNET_NAME}/devices"
+)
 
-echo "[tailscale] 接続開始: ${TS_HOSTNAME}.ts.net"
-tailscale up --authkey="${TS_AUTHKEY}" --hostname="${TS_HOSTNAME}"
+# ② .name フィールドが完全一致するデバイスID を抽出
+device_id=$(echo "$devices_json" | jq -r \
+  '.devices[] | select(.name == "'"${FQDN}"'") | .id')
 
-# TLS証明書がなければ取得
-CERT_DIR="/var/lib/tailscale/certs"
-if [ ! -f "$CERT_DIR/${TS_HOSTNAME}.ts.net.crt" ]; then
-  echo "[tailscale] 証明書を取得中..."
-  tailscale cert "${TS_HOSTNAME}.ts.net"
+if [ -n "$device_id" ] && [ "$device_id" != "null" ]; then
+  echo "[tailscale] 削除対象 ID=${device_id}"
+  # ③ 正しいエンドポイントで削除
+  curl -s -u "${TS_ADMIN_KEY}:" -X DELETE \
+    "https://api.tailscale.com/api/v2/device/${device_id}"
+  echo "[tailscale] 削除完了: ${FQDN} (${device_id})"
+else
+  echo "[tailscale] 削除対象が見つかりません: ${FQDN}"
 fi
 
-# 証明書配置
-cp "$CERT_DIR/${TS_HOSTNAME}.ts.net.crt" /etc/nginx/ssl/tls.crt
-cp "$CERT_DIR/${TS_HOSTNAME}.ts.net.key" /etc/nginx/ssl/tls.key
+# --- ③ tailscaled 起動／wait ---
+echo "[tailscale] 起動準備中…"
+tailscaled &
+TRIES=0
+until tailscale status &>/dev/null || [ $TRIES -gt 10 ]; do
+  sleep 1; TRIES=$((TRIES+1))
+done
 
+# --- ④ 新規 narou-test で up & cert ---
+echo "[tailscale] 接続: ${NODE}"
+tailscale up --authkey="${TS_AUTHKEY}" --hostname="${NODE}"
+
+echo "[tailscale] 証明書取得: ${FQDN}"
+tailscale cert "${FQDN}" || echo "[warning] cert 取得失敗"
+
+# --- ⑤ 証明書を nginx 用ディレクトリへ ---
+CERT_DIR="/var/lib/tailscale/certs"
+cp "${CERT_DIR}/${FQDN}.crt" /etc/nginx/ssl/tls.crt
+cp "${CERT_DIR}/${FQDN}.key" /etc/nginx/ssl/tls.key
+
+# --- ⑥ nginx 起動 ---
 echo "[nginx] 起動"
 exec nginx -g 'daemon off;'
