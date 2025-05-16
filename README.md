@@ -33,8 +33,7 @@ project-root/
 │
 └── rclone/
     ├── Dockerfile         # rclone＋jq
-    ├── backup.sh          # 初回復元＋定期バックアップ
-    └── rclone.conf        # （自動生成 or マウント）
+    └── backup.sh          # 初回復元＋定期バックアップ
 ````
 
 ---
@@ -49,7 +48,8 @@ project-root/
    cp .env.example .env
    # その後 .env を開いて各種値を設定
    ```
-4. `.env` は `.gitignore` に含め、機密情報をコミットしないこと
+4. files/setting.ini を開いて各種設定
+5. `.env` は `.gitignore` に含め、機密情報をコミットしないこと
 
 ---
 
@@ -69,11 +69,14 @@ GIT_BRANCH=main
 # WebDAV (rclone)
 WEBDAV_URL=https://example.com/remote.php/webdav/
 WEBDAV_USER=your-username
-WEBDAV_PASS_ENC=encrypted:xxxxxxx
+WEBDAV_PASSC=abcd1234
 WEBDAV_VENDOR=nextcloud
 
 # Cookie 保存先
 COOKIE_PATH=/app/code/cookie
+
+# === Docker内の時間の設定 ===
+TZ=Asia/Tokyo               # タイムゾーン
 ```
 
 ---
