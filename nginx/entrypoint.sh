@@ -1,57 +1,72 @@
 #!/bin/bash
 set -euo pipefail
 
-# --- ① 必須変数チェック ---
+# --------------------------------------------------
+# tailscale + nginx entrypoint
+#   * tailscale cert をバックグラウンドで取得
+#   * nginx は先に自己署名で Listen、正式証明書が落ちたら自動 reload
+# --------------------------------------------------
+
 : "${TS_ADMIN_KEY:?TS_ADMIN_KEY が未設定です}"
 : "${TAILNET_NAME:?TAILNET_NAME が未設定です}"
 : "${TS_HOSTNAME:?TS_HOSTNAME が未設定です}"
 : "${TS_AUTHKEY:?TS_AUTHKEY が未設定です}"
 
-NODE="${TS_HOSTNAME%%.*}"   # narou-test
-FQDN="${TS_HOSTNAME}"       # narou-test.taila0dfa.ts.net
+NODE="${TS_HOSTNAME%%.*}"
+FQDN="${TS_HOSTNAME}"
+CERT_DIR="/var/lib/tailscale/certs"
+NGINX_SSL_DIR="/etc/nginx/ssl"
+CRT="${NGINX_SSL_DIR}/tls.crt"
+KEY="${NGINX_SSL_DIR}/tls.key"
 
-# --- 既存 narou-test デバイスを全削除 ---
-echo "[tailscale] FQDN に一致する既存デバイスを削除: ${FQDN}"
-# ① デバイス一覧取得
-devices_json=$(
-  curl -s -u "${TS_ADMIN_KEY}:" \
-    "https://api.tailscale.com/api/v2/tailnet/${TAILNET_NAME}/devices"
-)
+log(){ echo "[$(date +%H:%M:%S)] $*"; }
 
-# ② .name フィールドが完全一致するデバイスID を抽出
-device_id=$(echo "$devices_json" | jq -r \
-  '.devices[] | select(.name == "'"${FQDN}"'") | .id')
+# ===== 既存デバイス削除 =====
+log "purge duplicates of ${FQDN}"
+curl -s -u "${TS_ADMIN_KEY}:" \
+  "https://api.tailscale.com/api/v2/tailnet/${TAILNET_NAME}/devices" |
+  jq -r '.devices[] | select(.name=="'"${FQDN}"'") | .id' |
+  while read -r id; do
+    [ -n "$id" ] && curl -sf -u "${TS_ADMIN_KEY}:" -X DELETE \
+      "https://api.tailscale.com/api/v2/device/${id}" && log "  deleted ${id}"
+  done
 
-if [ -n "$device_id" ] && [ "$device_id" != "null" ]; then
-  echo "[tailscale] 削除対象 ID=${device_id}"
-  # ③ 正しいエンドポイントで削除
-  curl -s -u "${TS_ADMIN_KEY}:" -X DELETE \
-    "https://api.tailscale.com/api/v2/device/${device_id}"
-  echo "[tailscale] 削除完了: ${FQDN} (${device_id})"
-else
-  echo "[tailscale] 削除対象が見つかりません: ${FQDN}"
+# ===== tailscaled 起動 =====
+log "start tailscaled"
+tailscaled --state=/var/lib/tailscale/tailscaled.state &
+for i in {1..20}; do tailscale status &>/dev/null && break; sleep 1; done
+
+# ===== tailscale up =====
+log "tailscale up (${NODE})"
+tailscale up --reset --authkey="${TS_AUTHKEY}" --hostname="${NODE}" || log "[warn] up failed"
+
+# ===== 先に自己署名を用意して nginx 起動 =====
+mkdir -p "$NGINX_SSL_DIR"
+if [[ ! -s "$CRT" || ! -s "$KEY" ]]; then
+  log "generate temp self‑signed cert"
+  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+    -subj "/CN=${FQDN}" -keyout "$KEY" -out "$CRT" 2>/dev/null
 fi
 
-# --- ③ tailscaled 起動／wait ---
-echo "[tailscale] 起動準備中…"
-tailscaled &
-TRIES=0
-until tailscale status &>/dev/null || [ $TRIES -gt 10 ]; do
-  sleep 1; TRIES=$((TRIES+1))
-done
+log "start nginx (self‑signed)"
+nginx -g 'daemon off;' &
+NGINX_PID=$!
 
-# --- ④ 新規 narou-test で up & cert ---
-echo "[tailscale] 接続: ${NODE}"
-tailscale up --authkey="${TS_AUTHKEY}" --hostname="${NODE}"
+# ===== 正式証明書をバックグラウンド取得し、完了後 reload =====
+(
+  log "tailscale cert background fetch"
+  mkdir -p "$CERT_DIR"
+  if tailscale cert \
+        --cert-file "${CERT_DIR}/${FQDN}.crt" \
+        --key-file  "${CERT_DIR}/${FQDN}.key" \
+        "${FQDN}"; then
+    log "cert fetched; installing and reloading nginx"
+    install -Dm640 "${CERT_DIR}/${FQDN}.crt" "$CRT"
+    install -Dm640 "${CERT_DIR}/${FQDN}.key" "$KEY"
+    nginx -s reload || kill -HUP "$NGINX_PID"
+  else
+    log "[warn] cert fetch failed"
+  fi
+) &
 
-echo "[tailscale] 証明書取得: ${FQDN}"
-tailscale cert "${FQDN}" || echo "[warning] cert 取得失敗"
-
-# --- ⑤ 証明書を nginx 用ディレクトリへ ---
-CERT_DIR="/var/lib/tailscale/certs"
-cp "${CERT_DIR}/${FQDN}.crt" /etc/nginx/ssl/tls.crt
-cp "${CERT_DIR}/${FQDN}.key" /etc/nginx/ssl/tls.key
-
-# --- ⑥ nginx 起動 ---
-echo "[nginx] 起動"
-exec nginx -g 'daemon off;'
+wait "$NGINX_PID"

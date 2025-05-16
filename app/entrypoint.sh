@@ -52,7 +52,7 @@ fi
 ## ── 4. アプリを実行 ────────────────────────────
 # /share/data に *.ready ファイルが現れるまで待機
 echo "[app] /share/data に .ready ファイルを待機中…"
-while ! ls /share/data/*.ready &>/dev/null; do
+while ! ls /share/data/.ready &>/dev/null; do
   sleep 1
 done
 echo "[app] .ready ファイルを検出しました。アプリを起動します。"
