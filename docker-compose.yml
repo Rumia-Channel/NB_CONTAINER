@@ -49,6 +49,7 @@ services:
     volumes:
       - ./files:/app/files:ro
       - app-code:/app/code
+      - app-queue:/app/queue
       - app-config:/app/config
       - app-extensions:/app/extensions
       - shared-data:/share/data
@@ -72,6 +73,7 @@ services:
       TZ: ${TZ}                       # ← 追加
     volumes:
       - shared-data:/share/data
+      - rclone-config:/config
       - /etc/localtime:/etc/localtime:ro    # ← 追加
       - /etc/timezone:/etc/timezone:ro      # ← 追加
 
@@ -79,8 +81,10 @@ volumes:
   nginx-tailscale:
   app-code:
   app-config:
+  app-queue:
   app-extensions:
   shared-data:
+  rclone-config:
 
 networks:
   backend:

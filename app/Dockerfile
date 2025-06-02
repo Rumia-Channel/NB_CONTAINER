@@ -10,7 +10,7 @@ RUN apt-get update && \
         libgbm1 libpango-1.0-0 libpangocairo-1.0-0 libx11-xcb1 libxfixes3 \
         libx11-6 libxext6 libxtst6 libwayland-client0 libwayland-cursor0 \
         libwayland-egl1 libxrender1 libglu1-mesa fonts-liberation \
-        libgdk-pixbuf2.0-0 libu2f-udev && \
+        libgdk-pixbuf2.0-0 libu2f-udev xvfb xauth && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 2) エントリポイント & 付随ファイル

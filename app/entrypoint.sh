@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
 echo "[init] Rye のインストールチェック…"
 if ! command -v rye >/dev/null 2>&1; then
@@ -31,7 +31,6 @@ fi
 
 ## ── 2. 設定ファイルを配置 ───────────────────────
 echo "[app] 設定ファイルを配置します"
-
 install -Dm644 /app/files/setting.ini /app/code/setting/setting.ini
 
 # Cookie
